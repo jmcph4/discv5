@@ -2,10 +2,12 @@
 
 use crate::{socket::ListenConfig, Discv5, *};
 use enr::{k256, CombinedKey, Enr, EnrBuilder, EnrKey, NodeId};
+use parking_lot::RwLock;
 use rand_core::{RngCore, SeedableRng};
 use std::{
     collections::HashMap,
     net::{Ipv4Addr, Ipv6Addr},
+    sync::Arc,
 };
 
 fn init() {
@@ -28,11 +30,13 @@ async fn build_nodes(n: usize, base_port: u16) -> Vec<Discv5> {
         let listen_config = ListenConfig::Ipv4 { ip, port };
         let config = ConfigBuilder::new(listen_config).build();
 
-        let enr = EnrBuilder::new("v4")
-            .ip4(ip)
-            .udp4(port)
-            .build(&enr_key)
-            .unwrap();
+        let enr = Arc::new(RwLock::new(
+            EnrBuilder::new("v4")
+                .ip4(ip)
+                .udp4(port)
+                .build(&enr_key)
+                .unwrap(),
+        ));
         // transport for building a swarm
         let mut discv5 = Discv5::new(enr, enr_key, config).unwrap();
         discv5.start().await.unwrap();
@@ -52,11 +56,13 @@ async fn build_nodes_from_keypairs(keys: Vec<CombinedKey>, base_port: u16) -> Ve
         let listen_config = ListenConfig::Ipv4 { ip, port };
         let config = ConfigBuilder::new(listen_config).build();
 
-        let enr = EnrBuilder::new("v4")
-            .ip4(ip)
-            .udp4(port)
-            .build(&enr_key)
-            .unwrap();
+        let enr = Arc::new(RwLock::new(
+            EnrBuilder::new("v4")
+                .ip4(ip)
+                .udp4(port)
+                .build(&enr_key)
+                .unwrap(),
+        ));
 
         let mut discv5 = Discv5::new(enr, enr_key, config).unwrap();
         discv5.start().await.unwrap();
@@ -77,11 +83,13 @@ async fn build_nodes_from_keypairs_ipv6(keys: Vec<CombinedKey>, base_port: u16) 
         };
         let config = ConfigBuilder::new(listen_config).build();
 
-        let enr = EnrBuilder::new("v4")
-            .ip6(Ipv6Addr::LOCALHOST)
-            .udp6(port)
-            .build(&enr_key)
-            .unwrap();
+        let enr = Arc::new(RwLock::new(
+            EnrBuilder::new("v4")
+                .ip6(Ipv6Addr::LOCALHOST)
+                .udp6(port)
+                .build(&enr_key)
+                .unwrap(),
+        ));
 
         let mut discv5 = Discv5::new(enr, enr_key, config).unwrap();
         discv5.start().await.unwrap();
@@ -108,13 +116,15 @@ async fn build_nodes_from_keypairs_dual_stack(
         };
         let config = ConfigBuilder::new(listen_config).build();
 
-        let enr = EnrBuilder::new("v4")
-            .ip4(Ipv4Addr::LOCALHOST)
-            .udp4(ipv4_port)
-            .ip6(Ipv6Addr::LOCALHOST)
-            .udp6(ipv6_port)
-            .build(&enr_key)
-            .unwrap();
+        let enr = Arc::new(RwLock::new(
+            EnrBuilder::new("v4")
+                .ip4(Ipv4Addr::LOCALHOST)
+                .udp4(ipv4_port)
+                .ip6(Ipv6Addr::LOCALHOST)
+                .udp6(ipv6_port)
+                .build(&enr_key)
+                .unwrap(),
+        ));
 
         let mut discv5 = Discv5::new(enr, enr_key, config).unwrap();
         discv5.start().await.unwrap();
@@ -744,14 +754,16 @@ async fn test_table_limits() {
     let mut keypairs = generate_deterministic_keypair(12, 9487);
     let ip: Ipv4Addr = "127.0.0.1".parse().unwrap();
     let enr_key: CombinedKey = keypairs.remove(0);
-    let enr = EnrBuilder::new("v4")
-        .ip4(ip)
-        .udp4(9050)
-        .build(&enr_key)
-        .unwrap();
+    let enr = Arc::new(RwLock::new(
+        EnrBuilder::new("v4")
+            .ip4(ip)
+            .udp4(9050)
+            .build(&enr_key)
+            .unwrap(),
+    ));
     let listen_config = ListenConfig::Ipv4 {
-        ip: enr.ip4().unwrap(),
-        port: enr.udp4().unwrap(),
+        ip: enr.read().ip4().unwrap(),
+        port: enr.read().udp4().unwrap(),
     };
     let config = ConfigBuilder::new(listen_config).ip_limit().build();
 
@@ -782,11 +794,13 @@ async fn test_table_limits() {
 async fn test_bucket_limits() {
     let enr_key = CombinedKey::generate_secp256k1();
     let ip: Ipv4Addr = "127.0.0.1".parse().unwrap();
-    let enr = EnrBuilder::new("v4")
-        .ip4(ip)
-        .udp4(9500)
-        .build(&enr_key)
-        .unwrap();
+    let enr = Arc::new(RwLock::new(
+        EnrBuilder::new("v4")
+            .ip4(ip)
+            .udp4(9500)
+            .build(&enr_key)
+            .unwrap(),
+    ));
     let bucket_limit: usize = 2;
     // Generate `bucket_limit + 1` keypairs that go in `enr` node's 256th bucket.
     let keys = {
@@ -794,9 +808,11 @@ async fn test_bucket_limits() {
         for _ in 0..bucket_limit + 1 {
             loop {
                 let key = CombinedKey::generate_secp256k1();
-                let enr_new = EnrBuilder::new("v4").build(&key).unwrap();
-                let node_key: Key<NodeId> = enr.node_id().into();
-                let distance = node_key.log2_distance(&enr_new.node_id().into()).unwrap();
+                let enr_new = Arc::new(RwLock::new(EnrBuilder::new("v4").build(&key).unwrap()));
+                let node_key: Key<NodeId> = enr.read().node_id().into();
+                let distance = node_key
+                    .log2_distance(&enr_new.read().node_id().into())
+                    .unwrap();
                 if distance == 256 {
                     keys.push(key);
                     break;
@@ -819,8 +835,8 @@ async fn test_bucket_limits() {
         .collect();
 
     let listen_config = ListenConfig::Ipv4 {
-        ip: enr.ip4().unwrap(),
-        port: enr.udp4().unwrap(),
+        ip: enr.read().ip4().unwrap(),
+        port: enr.read().udp4().unwrap(),
     };
     let config = ConfigBuilder::new(listen_config).ip_limit().build();
 

@@ -55,11 +55,12 @@
 //! ```rust
 //!    use discv5::{enr, enr::{CombinedKey, NodeId}, TokioExecutor, Discv5, ConfigBuilder};
 //!    use discv5::socket::ListenConfig;
-//!    use std::net::{Ipv4Addr, SocketAddr};
+//!    use std::{net::{Ipv4Addr, SocketAddr}, sync::Arc};
+//!    use parking_lot::RwLock;
 //!
 //!    // construct a local ENR
 //!    let enr_key = CombinedKey::generate_secp256k1();
-//!    let enr = enr::EnrBuilder::new("v4").build(&enr_key).unwrap();
+//!    let enr = Arc::new(RwLock::new(enr::EnrBuilder::new("v4").build(&enr_key).unwrap()));
 //!
 //!    // build the tokio executor
 //!    let mut runtime = tokio::runtime::Builder::new_multi_thread()

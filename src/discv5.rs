@@ -100,12 +100,12 @@ where
 
 impl<P: ProtocolIdentity> Discv5<P> {
     pub fn new(
-        local_enr: Enr,
+        local_enr: Arc<RwLock<Enr>>,
         enr_key: CombinedKey,
         mut config: Config,
     ) -> Result<Self, &'static str> {
         // ensure the keypair matches the one that signed the enr.
-        if local_enr.public_key() != enr_key.public() {
+        if local_enr.read().public_key() != enr_key.public() {
             return Err("Provided keypair does not match the provided ENR");
         }
 
@@ -126,7 +126,6 @@ impl<P: ProtocolIdentity> Discv5<P> {
             (None, None)
         };
 
-        let local_enr = Arc::new(RwLock::new(local_enr));
         let enr_key = Arc::new(RwLock::new(enr_key));
         let kbuckets = Arc::new(RwLock::new(KBucketsTable::new(
             local_enr.read().node_id().into(),

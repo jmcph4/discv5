@@ -11,7 +11,8 @@
 //! ```
 
 use discv5::{enr, enr::CombinedKey, ConfigBuilder, Discv5, Event, ListenConfig};
-use std::net::Ipv4Addr;
+use parking_lot::RwLock;
+use std::{net::Ipv4Addr, sync::Arc};
 
 #[tokio::main]
 async fn main() {
@@ -75,7 +76,7 @@ async fn main() {
     let config = ConfigBuilder::new(listen_config).build();
 
     // construct the discv5 server
-    let mut discv5: Discv5 = Discv5::new(enr, enr_key, config).unwrap();
+    let mut discv5: Discv5 = Discv5::new(Arc::new(RwLock::new(enr)), enr_key, config).unwrap();
 
     // if we know of another peer's ENR, add it known peers
     if let Some(base64_enr) = std::env::args().nth(3) {
